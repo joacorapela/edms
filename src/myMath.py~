@@ -1,0 +1,28 @@
+
+import pdb
+import numpy as np
+
+def multiplyMatrixColsByScalars(m, s):
+    return(m*s.reshape(1, len(s)))
+
+def normalizedCrossCorrelation(x, y):
+    answer = np.correlate(x-np.mean(x), y-np.mean(y))[0]
+    answer = answer/(np.std(x)*np.std(y))
+    return(answer)
+'''
+class LinearFunction:
+    def __init__(self, a, b):
+        self._a = a
+        self._b = b
+
+    def eval(self, x):
+            return(self._a+self._b*x)
+'''
+class Logistic:
+    def __init__(self, k, x0, l):
+        self._k = k
+        self._x0 = x0
+        self._l = l
+
+    def eval(self, x):
+        return(self._l/(1+np.exp(-self._k*(x-self._x0))))

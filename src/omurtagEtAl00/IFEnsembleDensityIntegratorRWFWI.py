@@ -1,0 +1,97 @@
+
+import sys
+import numpy as np
+from scipy.special import erfc
+import math
+import warnings
+import pdb
+from IFEnsembleDensityIntegratorRWF import IFEnsembleDensityIntegratorRWF
+from ifEDMsFunctions import computeA2, computeQs
+
+class IFEnsembleDensityIntegratorRWFWI(IFEnsembleDensityIntegratorRWF):
+
+    def __init__(self, nVSteps, leakage, hMu, hSigma, kappaMu, kappaSigma,
+                       fracExcitatoryNeurons, nInputsPerNeuron):
+        super(IFEnsembleDensityIntegratorRWFWI, self).\
+         __init__(nVSteps=nVSteps, leakage=leakage, hMu=hMu, hSigma=hSigma,
+                                   nInputsPerNeuron=nInputsPerNeuron)
+        self._a2 = computeA2(nVSteps=nVSteps, kappaMu=kappaMu,
+                                              kappaSigma=kappaSigma)
+        self._kappaMu = kappaMu
+        self._kappaSigma = kappaSigma
+        self._fracExcitatoryNeurons = fracExcitatoryNeurons
+        self._reversedQs = computeQs(nVSteps=nVSteps, hMu=hMu,
+                                                      hSigma=hSigma)[-1::-1]
+
+    def prepareToIntegrate(self, t0, tf, dt, eExternalInput, iExternalInput):
+        super(IFEnsembleDensityIntegratorRWFWI, self).\
+         prepareToIntegrate(t0=t0, tf=tf, dt=dt, eExternalInput=eExternalInput)
+        self._iExternalInput = iExternalInput
+        nTSteps = round((self._tf-self._t0)/self._dt)
+        self._iExternalInputHist = []
+        self._iFeedbackInputHist = []
+
+    def setInitialValue(self, rho0):
+        super(IFEnsembleDensityIntegratorRWFWI, self).setInitialValue(rho0=rho0)
+        self._iExternalInputHist.append(0.0)
+        self._iFeedbackInputHist.append(0.0)
+
+    def _deriv(self, t, rho):
+        spikeRateAtT = self._computeSpikeRate(rho=rho, t=t)
+        eExternalInput = self._eExternalInput(t)
+        eFeedbackInput = self._nInputsPerNeuron*self._fracExcitatoryNeurons*spikeRateAtT
+        sigmaE = eExternalInput + eFeedbackInput
+        binIndex = round((t-self._t0)/self._dt)
+        # if binIndex > len(self._eExternalInputHist):
+        #     pdb.set_trace()
+        # else:
+        #     print('Warning remove debug code')
+        # self._spikeRates[binIndex] = spikeRateAtT
+        self._eExternalInputHist.append(eExternalInput)
+        self._eFeedbackInputHist.append(eFeedbackInput)
+        iFeedbackInput = (self._nInputsPerNeuron*
+                            (1-self._fracExcitatoryNeurons)*spikeRateAtT)
+        sigmaI = iFeedbackInput
+        self._iFeedbackInputHist.append(iFeedbackInput)
+        if self._iExternalInput is not None:
+            iExternalInput = self._iExternalInput(t=t)
+            self._iExternalInputHist.append(iExternalInput)
+            sigmaI = sigmaI + iExternalInput
+        q = self._leakage*self._a0Tilde+sigmaE*self._a1-sigmaI*self._a2
+        answer = q.dot(rho)
+        return(answer)
+
+    def _computeSpikeRate(self, rho, t):
+        nVSteps = rho.size
+        dv = 1.0/nVSteps
+        dotProduct = self._reversedQs.dot(rho)*dv
+        r = self._eExternalInput(t)*dotProduct/\
+            (1-self._nInputsPerNeuron*self._fracExcitatoryNeurons*dotProduct)
+        if(r<0.0):
+            return(0.0)
+        '''
+        if math.isnan(r):
+            warnings.warn("r isnan")
+            pdb.set_trace()
+        print("t=%f, r=%f"%(t,r))
+        sys.stdout.flush()
+        '''
+        return(r)
+
+    def getIExternalInputHist(self):
+        return self._iExternalInputHist
+
+    def getIFeedbackInputHist(self):
+        return self._iFeedbackInputHist
+
+    def getA2(self):
+        return(self._a2)
+
+    def getReversedQs(self):
+        return(self._reversedQs)
+
+    def getFracExcitatoryNeurons(self):
+        return(self._fracExcitatoryNeurons)
+
+    def setFracExcitatoryNeurons(self, fracExcitatoryNeurons):
+        self._fracExcitatoryNeurons = fracExcitatoryNeurons

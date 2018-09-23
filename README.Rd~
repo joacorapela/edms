@@ -1,0 +1,29 @@
+hiddenMarkovModels
+==================
+
+python code to simulate ensemble dynamical models (Rapela et al., 2015).
+
+To simulate an ensemble dynamical model, of integrate and fire neurons,
+driven by excitatory and inhibiotory sinusoidal currents, run the script
+doTestIFEnsembleDensityIntegratorRWFWI.py (with python 2.7) from the directory
+test/simulations/omurtagSig:
+
+cd test/simulations/omurtagSim; python2.7 doTestIFEnsembleDensityIntegratorRWFWI.py
+
+This script will save two figures, rhosSinusoidalRWFWIPopulationKMu0.0300.eps
+and spikeRatesSinusoidalRWFWIPopulationKMu0.0300.eps, containing the
+integrated ensemble probability density function and the spike rate of the
+ensemble dynamical model.
+
+this function to estimate hidden Markov models with multivariate Gaussian
+(test/doTestMGaussian.R) and with Poisson observations. Poisson observations
+are modeled without autohistory (test/doTestPoisson.R)
+and with autohistory (test/doTestPoissonGLM.R).
+
+doc/hmmPoissonGLM.pdf documents the evaluation of the estimation of Hidden
+Markov Models with Poisson observations with autohistory in simulated data and
+in multiunit activity count recordings from a subject with epilepsy.
+
+Rapela  J., Kostuk M, Rowat, P.F., Mullen, T., Chang E.F., Bouchard K. (2015)
+Modeling  neural activity at the ensemble level.
+http://arxiv.org/abs/1505.00041

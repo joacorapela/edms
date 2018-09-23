@@ -1,0 +1,30 @@
+
+import math
+import numpy as np
+
+def multiplyMatrixColsByScalars(m, s):
+    return(m*s.reshape(1, len(s)))
+
+def normalizedCrossCorrelation(x, y):
+    answer = np.correlate(x-np.mean(x), y-np.mean(y))[0]
+    answer = answer/(np.std(x)*np.std(y))
+    return(answer)
+
+def calculateELLs(ys, rs, ysSigma):
+    twoTimesYsSigma2 = 2*ysSigma**2
+    log2PiYsSigma2 = math.log(math.pi*twoTimesYsSigma2)
+    eLLs = np.ones(len(rs))*(-0.5)*log2PiYsSigma2
+    auxSum = 0.0
+    for i in xrange(len(eLLs)):
+        auxSum = auxSum + (ys[i]-rs[i])**2
+        eLLs[i] = eLLs[i]-auxSum/((i+1)*twoTimesYsSigma2)
+    return(eLLs)
+
+def calculateELLsForParams(ys, rsForParams, ysSigma):
+    # rsForParms \in (nParams, nTimeSteps)
+    eLLs = np.empty(rsForParams.shape)
+    for paramIndex in xrange(rsForParams.shape[0]):
+        eLLs[paramIndex,:] = calculateELLs(ys=ys, rs=rsForParams[paramIndex,:], 
+                                                  ysSigma=ysSigma)
+    return(eLLs)
+

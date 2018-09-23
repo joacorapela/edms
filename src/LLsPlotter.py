@@ -1,0 +1,145 @@
+
+import sys
+import pdb
+import numpy as np
+import pdb
+import matplotlib.pyplot as plt
+
+class LLsPlotter:
+    def _getParamValues(self, params, paramIndex):
+        paramValues = []
+        for i in xrange(len(params)):
+            paramValues.append(params[i][paramIndex])
+        return(np.sort(np.unique(np.array(paramValues))))
+
+    def _paramsMatch(self, params, 
+                           paramXIndex, paramXValue, 
+                           paramYIndex, paramYValue,
+                           trueParams):
+        '''
+        Answers True if params are the trueParams with the exception of
+        params[paramXIndex] and params[paramYIndex] that should equal to
+        paramXValue and paramYValue, respectively
+        '''
+        for paramIndex in xrange(params.size):
+            paramValue = params[paramIndex]
+            if (paramIndex==paramXIndex and paramValue!=paramXValue) or\
+               (paramIndex==paramYIndex and paramValue!=paramYValue) or\
+               (paramIndex!=paramXIndex and paramIndex!=paramYIndex and \
+                paramValue!=trueParams[paramIndex]):
+                return(False)
+        return(True)
+
+    def _findValueForParams(self, values, params, paramXIndex, paramXValue, 
+                                      paramYIndex, paramYValue, trueParams):
+        for i in xrange(len(values)):
+            if self._paramsMatch(params=params[i], 
+                                  paramXIndex=paramXIndex, 
+                                  paramXValue=paramXValue,
+                                  paramYIndex=paramYIndex, 
+                                  paramYValue=paramYValue,
+                                  trueParams=trueParams):
+                return(values[i])
+        raise RuntimeException("Could not find value for parameters (%d=%f, %d=%f)"%\
+                               (paramXIndex, paramXValue, paramYIndex, paramYValue))
+
+    def _buildValuesMatrix(self, values, params, paramXIndex, paramYIndex, trueParams):
+        paramXValues = self._getParamValues(params=params, paramIndex=paramXIndex)
+        paramYValues = self._getParamValues(params=params, paramIndex=paramYIndex)
+        valuesMatrix = np.empty((paramYValues.size, paramXValues.size))
+
+        for i in xrange(len(paramXValues)):
+            for j in xrange(len(paramYValues)):
+                paramXValue = paramXValues[i]
+                paramYValue = paramYValues[j]
+                llForParams = self._findValueForParams(values=values, 
+                                                       params=params,
+                                                       paramXIndex=paramXIndex,
+                                                       paramXValue=paramXValue,
+                                                       paramYIndex=paramYIndex,
+                                                       paramYValue=paramYValue,
+                                                       trueParams=trueParams)
+                valuesMatrix[j, i] = llForParams
+        return(paramXValues, paramYValues, valuesMatrix)
+
+    def plotLLs(self, lls, params, trueParams, paramXIndex, paramYIndex, 
+                      xlabel, ylabel, figFilename, nLevels=30, 
+                      minLLToPlot=-float("inf"), cbLabel="Log Likelihood",
+                      measurementsMark="x", measurementsColor="white",
+                      trueParamsMark="o", trueParamsColor="white"):
+        # self._paramsMatch(params=np.array((40.0, 1, 0.2)), 
+        #                    paramXIndex=0,
+        #                    paramXValue=40,
+        #                    paramYIndex=1,
+        #                    paramYValue=1,
+        #                    trueParams=np.array(((20.0, 10, 0.2))))
+        paramXValues, paramYValues, llsMatrix = \
+         self._buildLLsMatrix(values=lls, params=params, paramXIndex=paramXIndex, 
+                                       paramYIndex=paramYIndex,
+                                       trueParams=trueParams)
+        X, Y = np.meshgrid(paramXValues, paramYValues)
+        tooSmallLLIndices = np.where(llsMatrix<minLLToPlot)
+        llsMatrix[tooSmallLLIndices[0], tooSmallLLIndices[1]] = minLLToPlot
+        cs = plt.contourf(X, Y, llsMatrix, nLevels)
+        plt.plot(X, Y, measurementsMark, color=measurementsColor)
+        plt.plot(trueParams[paramXIndex], trueParams[paramYIndex],
+                                          trueParamsMark, color=trueParamsColor)
+        cb = plt.colorbar(cs)
+        cb.set_label(cbLabel, fontsize="large")
+        plt.xlabel(xlabel, fontsize="large")
+        plt.ylabel(ylabel, fontsize="large")
+        plt.savefig(figFilename)
+        plt.close()
+
+    def plotLLsAndGradients(self, llsAndGradients, params, trueParams, 
+                                  paramXIndex, paramYIndex,
+                                  xlabel, ylabel, figFilename, nLevels=30, 
+                                  minLLToPlot=-float("inf"), 
+                                  cbLabel="Log Likelihood",
+                                  measurementsMark="x", 
+                                  measurementsColor="white",
+                                  trueParamsMark="o", 
+                                  trueParamsColor="white",
+                                  arrowsColor="white"):
+        lls = llsAndGradients[:,-1]
+        paramXValues, paramYValues, llsMatrix = \
+         self._buildValuesMatrix(values=lls, params=params, 
+                                             paramXIndex=paramXIndex, 
+                                             paramYIndex=paramYIndex,
+                                             trueParams=trueParams)
+        X, Y = np.meshgrid(paramXValues, paramYValues)
+        # tooSmallLLIndices = np.where(llsMatrix[:,0]<minLLToPlot)
+        # llsMatrix[tooSmallLLIndices[0], tooSmallLLIndices[1]] = minLLToPlot
+
+        derivativeXs = llsAndGradients[:,paramXIndex]
+        _, _, derivativeXsMatrix = \
+         self._buildValuesMatrix(values=derivativeXs, params=params, 
+                                             paramXIndex=paramXIndex, 
+                                             paramYIndex=paramYIndex,
+                                             trueParams=trueParams)
+
+        derivativeYs = llsAndGradients[:,paramYIndex]
+        _, _, derivativeYsMatrix = \
+         self._buildValuesMatrix(values=derivativeYs, params=params, 
+                                             paramXIndex=paramXIndex, 
+                                             paramYIndex=paramYIndex,
+                                             trueParams=trueParams)
+
+        N = np.sqrt(derivativeXsMatrix**2+derivativeYsMatrix**2)
+        maxN = N.max()
+        derivativeXsMatrix = derivativeXsMatrix/maxN
+        derivativeYsMatrix = derivativeYsMatrix/maxN
+
+        cs = plt.contourf(X, Y, llsMatrix, nLevels)
+        plt.quiver(X, Y, derivativeXsMatrix, derivativeYsMatrix, color=arrowsColor)
+        plt.plot(X, Y, measurementsMark, color=measurementsColor)
+        plt.plot(trueParams[paramXIndex], trueParams[paramYIndex],
+                                          trueParamsMark, color=trueParamsColor)
+        cb = plt.colorbar(cs)
+        cb.set_label(cbLabel, fontsize="large")
+        plt.xlabel(xlabel, fontsize="large")
+        plt.ylabel(ylabel, fontsize="large")
+        plt.savefig(figFilename)
+        plt.close()
+        pdb.set_trace()
+

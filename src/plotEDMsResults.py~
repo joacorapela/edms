@@ -1,0 +1,656 @@
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import pdb
+from edmsFunctions import computeKLDistances
+from ifEDMsFunctions import reconstructRhos
+from myUtils import plotMultipleTimeSeries, averageVector
+
+def plotMultipleRhosAtT0(vsCol, rhosCol, labels, 
+                                colors,
+                                linestyles,
+                                linewidths,
+                                legendLoc=None, 
+                                bbox_to_anchor=None, 
+                                legendSize=None, 
+                                xlab=r"$\upsilon$", 
+                                ylab=r"$\rho(\upsilon,\ 0.4s)$", 
+                                title="", 
+                                ylabFontsize=20,
+                                xlabFontsize=20):
+    def plotLegend(legendLoc, bbox_to_anchor, legendSize):
+        if legendLoc is not None:
+            if bbox_to_anchor is not None:
+                if legendSize is not None:
+                    plt.legend(loc=legendLoc, bbox_to_anchor=bbox_to_anchor,
+                                            prop={"size":legendSize})
+                else:
+                    plt.legend(loc=legendLoc, bbox_to_anchor=bbox_to_anchor)
+            else:
+                if legendSize is not None:
+                    plt.legend(loc=legendLoc, prop={"size":legendSize})
+                else:
+                    plt.legend(loc=legendLoc)
+        else:
+            if bbox_to_anchor is not None:
+                if legendSize is not None:
+                    plt.legend(bbox_to_anchor=bbox_to_anchor,
+                                prop={"size":legendSize})
+                else:
+                    plt.legend(bbox_to_anchor=bbox_to_anchor)
+            else:
+                if legendSize is not None:
+                    plt.legend(prop={"size":legendSize})
+                else:
+                    plt.legend()
+
+
+    for i in xrange(rhosCol.shape[1]):
+        plt.plot(vsCol[:, i], rhosCol[:, i], label=labels[i], color=colors[i],
+                              linestyle=linestyles[i], linewidth=linewidths[i])
+    plt.xlabel(xlab, fontsize=xlabFontsize)
+    plt.ylabel(ylab, fontsize=ylabFontsize)
+    plotLegend(legendLoc=legendLoc, bbox_to_anchor=bbox_to_anchor, 
+                                    legendSize=legendSize)
+    plt.grid()
+    plt.title(title)
+
+def plotRhosAtT0Figure(t0, populationType, 
+                           neuronsResultFilename,
+                           fullEDMResulsFilename,
+                           ldEDMREsultsFilenames,
+                           eigenRepos,
+                           labels, 
+                           legendLoc, bbox_to_anchor, 
+                           legendSize,
+                           colors, linestyles, linewidths, 
+                           xlab, ylab, title, 
+                           xlabFontsize, ylabFontsize):
+    if populationType=="e":
+        timesKey = "eTimes"
+        rhosKey = "eRhos"
+        sriLDCoefsKey = "eSRILDCoefs"
+        eExternalInputHistKey = "eEExternalInputHist"
+        iExternalInputHistKey = "eIExternalInputHist"
+        eFeedbackInputHistKey = "eEFeedbackInputHist"
+        iFeedbackInputHistKey = "eIFeedbackInputHist"
+    elif populationType== "i":
+        timesKey = "iTimes"
+        rhosKey = "iRhos"
+        sriLDCoefsKey = "iSRILDCoefs"
+        eExternalInputHistKey = "iEExternalInputHist"
+        iExternalInputHistKey = "iIExternalInputHist"
+        eFeedbackInputHistKey = "iEFeedbackInputHist"
+        iFeedbackInputHistKey = "iIFeedbackInputHist"
+    else:
+        raise ValueError("Invalid populationType=%s. It should be e or i.")
+    vsKey = "vs"
+    saveRhosTimeDSFactorKey = "saveRhosTimeDSFactor"
+
+    results = np.load(neuronsResultFilename)
+    vs = results[vsKey]
+    rhos = results[rhosKey]
+    times = results[timesKey]
+#     saveRhosTimeDSFactor = results[saveRhosTimeDSFactorKey]
+    saveRhosTimeDSFactor = 100
+    timesForRhos = times[::saveRhosTimeDSFactor]
+
+    vsCol = np.empty((vs.size, 2+len(ldEDMREsultsFilenames)))
+    rhosAtT0Col = np.empty((vs.size, 2+len(ldEDMREsultsFilenames)))
+
+    vsCol[:, 0] = vs
+    t0Index = np.argmax(timesForRhos>t0)
+    rhosAtT0Col[:, 0] = rhos[:, t0Index]
+
+    results = np.load(fullEDMResulsFilename)
+    vs = results[vsKey]
+    rhos = results[rhosKey]
+    times = results[timesKey]
+#     saveRhosTimeDSFactor = results[saveRhosTimeDSFactorKey]
+    saveRhosTimeDSFactor = 100
+    timesForRhos = times[::saveRhosTimeDSFactor]
+
+    vsCol[:, 1] = vs
+    t0Index = np.argmax(timesForRhos>t0)
+    rhosAtT0Col[:, 1] = rhos[:, t0Index]
+    for i in xrange(len(ldEDMREsultsFilenames)):
+        results = np.load(ldEDMREsultsFilenames[i])
+        vs = results[vsKey]
+        times = results[timesKey]
+#         saveRhosTimeDSFactor = results[saveRhosTimeDSFactorKey]
+        saveRhosTimeDSFactor = 100
+        timesForRhos = times[::saveRhosTimeDSFactor]
+        rhosFromLD = reconstructRhos(sriLDCoefs=results[sriLDCoefsKey],
+                                      eigenRepos=eigenRepos,
+                                      eExternalInputHist=
+                                       results[eExternalInputHistKey],
+                                      iExternalInputHist=
+                                       results[iExternalInputHistKey],
+                                      eFeedbackInputHist=
+                                       results[eFeedbackInputHistKey],
+                                      iFeedbackInputHist=
+                                       results[iFeedbackInputHistKey],
+                                      saveRhosTimeDSFactor=saveRhosTimeDSFactor)
+        vsCol[:, 2+i] = vs
+        t0Index = np.argmax(timesForRhos>t0)
+        rhosAtT0Col[:, 2+i] = rhosFromLD[:, t0Index]
+    plotMultipleRhosAtT0(vsCol=vsCol, rhosCol=rhosAtT0Col, 
+                                      labels=labels, 
+                                      legendLoc=legendLoc, 
+                                      bbox_to_anchor=bbox_to_anchor, 
+                                      legendSize=legendSize, 
+                                      colors=colors,
+                                      linestyles=linestyles,
+                                      linewidths=linewidths,
+                                      xlab=xlab, ylab=ylab, title=title,
+                                      xlabFontsize=xlabFontsize,
+                                      ylabFontsize=ylabFontsize)
+
+
+def plotSpikeRatesFigure(populationType, neuronsResultFilename,
+                                         fullEDMResulsFilename,
+                                         ldEDMREsultsFilenames,
+                                         labels, 
+                                         legendLoc, bbox_to_anchor, 
+                                         legendSize,
+                                         colEExternalInput,
+                                         lsEExternalInput,
+                                         ylabelEExternalInput,
+                                         labelEExternalInput,
+                                         legendLocEExternalInput,
+                                         bbox_to_anchorEExternalInput,
+                                         colors, linestyles,
+                                         linewidths, dt, averageWinTimeLength,
+                                         fromTime, toTime, xlab, ylab, title,
+                                         ylim, ax):
+    if populationType=="e":
+        timesKey = "eTimes"
+        spikeRatesKey = "eSpikeRates"
+        eExternalInputKey = "eEExternalInputHist"
+    elif populationType== "i":
+        timesKey = "iTimes"
+        spikeRatesKey = "iSpikeRates"
+        eExternalInputKey = "iEExternalInputHist"
+    else:
+        raise ValueError("Invalid populationType=%s. It should be e or i.")
+
+    results = np.load(neuronsResultFilename)
+    spikeRates = results[spikeRatesKey]
+    times = results[timesKey]
+
+    spikeRatesCol = np.empty((spikeRates.size, 2+len(ldEDMREsultsFilenames)))
+    spikeRatesCol[:, 0] = spikeRates
+    timesCol = np.empty((spikeRates.size, 2+len(ldEDMREsultsFilenames)))
+    timesCol[:, 0] = times
+
+    results = np.load(fullEDMResulsFilename)
+    spikeRatesCol[:, 1] = results[spikeRatesKey]
+    timesCol[:, 1] = results[timesKey]
+    eExternalInput = results[eExternalInputKey]
+    for i in xrange(len(ldEDMREsultsFilenames)):
+        results = np.load(ldEDMREsultsFilenames[i])
+        spikeRatesCol[:, 2+i] = results[spikeRatesKey]
+        timesCol[:, 2+i] = results[timesKey]
+
+    plotMultipleTimeSeries(timesCol=timesCol, 
+                            timeSeriesCol=spikeRatesCol, 
+                            labels=labels,
+                            legendLoc=legendLoc, 
+                            legendSize=legendSize,
+                            bbox_to_anchor=bbox_to_anchor,
+                            colors=colors, 
+                            linestyles=linestyles, 
+                            linewidths=linewidths, dt=dt, 
+                            averageWinTimeLength=averageWinTimeLength, 
+                            fromTime=fromTime, toTime=toTime, 
+                            xlab=xlab, ylab=ylab, title=title, ylim=ylim, ax=ax)
+    fromIndex = np.argmax(times>=fromTime)
+    toIndex = np.argmax(times>toTime)
+    twinAx = ax.twinx()
+    twinAx.plot(times[fromIndex:toIndex], eExternalInput[fromIndex:toIndex], 
+                                          label=labelEExternalInput,
+                                          color=colEExternalInput,
+                                          linestyle=lsEExternalInput)
+    if legendSize is not None:
+        twinAx.legend(loc=legendLocEExternalInput,
+                       bbox_to_anchor=bbox_to_anchorEExternalInput,
+                       prop={"size":legendSize})
+    else:
+        twinAx.legend(loc=legendLocEExternalInput,
+                       bbox_to_anchor=bbox_to_anchorEExternalInput)
+    twinAx.set_ylabel(ylabelEExternalInput)
+    
+def plotKLDistancesFigure(populationType, neuronsResultFilename,
+                                          fullEDMResulsFilename,
+                                          ldEDMREsultsFilenames,
+                                          eigenRepos,
+                                          labels, 
+                                          legendLoc, bbox_to_anchor, 
+                                          legendSize,
+                                          colors, linestyles,
+                                          linewidths, dt, averageWinTimeLength,
+                                          fromTime, toTime, xlab, ylab, title,
+                                          ylim=None, ax=None):
+    if populationType=="e":
+        timesKey = "eTimes"
+        rhosKey = "eRhos"
+        sriLDCoefsKey = "eSRILDCoefs"
+        eExternalInputHistKey = "eEExternalInputHist"
+        iExternalInputHistKey = "eIExternalInputHist"
+        eFeedbackInputHistKey = "eEFeedbackInputHist"
+        iFeedbackInputHistKey = "eIFeedbackInputHist"
+    elif populationType== "i":
+        timesKey = "iTimes"
+        rhosKey = "iRhos"
+        sriLDCoefsKey = "iSRILDCoefs"
+        eExternalInputHistKey = "iEExternalInputHist"
+        iExternalInputHistKey = "iIExternalInputHist"
+        eFeedbackInputHistKey = "iEFeedbackInputHist"
+        iFeedbackInputHistKey = "iIFeedbackInputHist"
+    else:
+        raise ValueError("Invalid populationType=%s. It should be e or i.")
+    saveRhosTimeDSFactorKey = "saveRhosTimeDSFactor"
+
+    results = np.load(neuronsResultFilename)
+    neuronsRhos = results[rhosKey]
+    times = results[timesKey]
+#     saveRhosTimeDSFactor = results[saveRhosTimeDSFactorKey]
+    saveRhosTimeDSFactor = 100
+    averageWinTimeLength = averageWinTimeLength/saveRhosTimeDSFactor
+
+    klDistancesCol = np.empty((1+times.size/saveRhosTimeDSFactor,
+                                                               1+len(ldEDMREsultsFilenames)))
+    timesForRhosCol = np.empty((1+times.size/saveRhosTimeDSFactor,
+                                                              1+len(ldEDMREsultsFilenames)))
+    results = np.load(fullEDMResulsFilename)
+    fullEDMRhos = results[rhosKey]
+    fullEDMRhos[np.where(fullEDMRhos<0.0)] = 0.0
+    klDistancesCol[:, 0] = computeKLDistances(rhos1=neuronsRhos, 
+                                               rhos2=fullEDMRhos)
+    times = results[timesKey]
+    timesForRhosCol[:, 0] = times[::saveRhosTimeDSFactor]
+    for i in xrange(len(ldEDMREsultsFilenames)):
+        results = np.load(ldEDMREsultsFilenames[i])
+#         saveRhosTimeDSFactor = results[saveRhosTimeDSFactorKey]
+        saveRhosTimeDSFactor = 100
+        rhosFromLD = reconstructRhos(sriLDCoefs=results[sriLDCoefsKey], 
+                                      eigenRepos=eigenRepos, 
+                                      eExternalInputHist=results[eExternalInputHistKey], 
+                                      iExternalInputHist=results[iExternalInputHistKey], 
+                                      eFeedbackInputHist=results[eFeedbackInputHistKey], 
+                                      iFeedbackInputHist=results[iFeedbackInputHistKey], 
+                                      saveRhosTimeDSFactor=saveRhosTimeDSFactor)
+        rhosFromLD[np.where(rhosFromLD<0.0)] = 0.0
+        klDistancesCol[:, 1+i] = computeKLDistances(rhos1=neuronsRhos, 
+                                                     rhos2=rhosFromLD)
+        times = results[timesKey]
+        timesForRhosCol[:, 1+i] = times[::saveRhosTimeDSFactor]
+
+    plotMultipleTimeSeries(timesCol=timesForRhosCol, 
+                            timeSeriesCol=klDistancesCol, 
+                            labels=labels, 
+                            legendLoc=legendLoc, 
+                            bbox_to_anchor=bbox_to_anchor, 
+                            legendSize=legendSize, 
+                            colors=colors, 
+                            linestyles=linestyles, 
+                            linewidths=linewidths, 
+                            dt=dt, 
+                            averageWinTimeLength=averageWinTimeLength, 
+                            ylab=ylab, 
+                            fromTime=fromTime, toTime=toTime, 
+                            xlab=xlab, title=title, ylim=ylim, ax=ax)
+
+def plotSpikeRatesAndInputs(times, spikeRates, dt, averageWinTimeLength, 
+                                  eExternalInput=None, eFeedbackInput=None,
+                                  iExternalInput=None, iFeedbackInput=None,
+                                  xlab="Time (s)",
+                                  spikesYlab=\
+                                   "Firing Rate (ips)", 
+                                  currentsYlab="Current (ips)", 
+                                  title="",
+                                  spikeRatesFmt="b-",
+                                  eExternalInputFmt="m-", 
+                                  eFeedbackInputFmt="m--",
+                                  iExternalInputFmt="y-", 
+                                  iFeedbackInputFmt="y--",
+                                  ylimAx1=None,
+                                  ylimAx2=None,
+                                  titleFontsize="medium"):
+    averageWinSampleLength = int(rond(averageWinTimeLength/dt))
+    averagedSpikeRates = averageVector(spikeRates, averageWinSampleLength)
+    averagedTimes = averageVector(times, averageWinSampleLength)
+    fig, ax1 = plt.subplots()
+    ax1.plot(averagedTimes, averagedSpikeRates, spikeRatesFmt)
+    if (eExternalInput is not None) or (eFeedbackInput is not None) or \
+       (iExternalInput is not None) or (iFeedbackInput is not None):
+        ax2 = ax1.twinx()
+        ax2.set_ylabel(currentsYlab)
+        if eExternalInput is not None:
+            averagedEExternalInput = averageVector(eExternalInput,
+                                                   averageWinSampleLength)
+            ax2.plot(averagedTimes, averagedEExternalInput, eExternalInputFmt)
+        if eFeedbackInput is not None:
+            averagedEFeedbackInput = averageVector(eFeedbackInput,
+                                                      averageWinSampleLength)
+            ax2.plot(averagedTimes, averagedEFeedbackInput, eFeedbackInputFmt)
+        if iExternalInput is not None:
+            averagedIExternalInput = averageVector(iExternalInput, 
+                                                   averageWinSampleLength)
+            ax2.plot(averagedTimes, averagedIExternalInput, iExternalInputFmt)
+        if iFeedbackInput is not None:
+            averagedIFeedbackInput = averageVector(iFeedbackInput,
+                                                      averageWinSampleLength)
+            ax2.plot(averagedTimes, averagedIFeedbackInput, iFeedbackInputFmt)
+    ax1.grid()
+    ax1.set_xlabel(xlab)
+    ax1.set_ylabel(spikesYlab)
+    if ylimAx1 is not None:
+        ax1.set_ylim(ylimAx1)
+    if eExternalInput is not None or eFeedbackInput is not None or iExternalInput is not None or iFeedbackInput is not None:
+        if ylimAx2 is not None:
+            ax2.set_ylim(ylimAx2)
+    plt.title(title, fontsize=titleFontsize)
+
+def plotRhos(vs, times, rhos, ylimMin=0, ylimMax=1, 
+                 climMin=-np.inf, climMax=np.inf, xlabel="Time (sec)",
+                 ylabel="Normalized Voltage", clabel="Probability Density"):
+    if not np.isfinite(climMin):
+        climMin = rhos.min()
+    if not np.isfinite(climMax):
+        climMax = rhos.max()
+
+    extent = (times.min(), times.max(), vs.min(), vs.max())
+#     plt.figure()
+#     ax = plt.imshow(rhos, extent=extent, cmap=cm.gray, aspect="auto", origin="lower")
+    ax = plt.imshow(rhos, extent=extent, aspect="auto", origin="lower")
+    ax.set_clim(climMin, climMax)
+    cbar = plt.colorbar(ax)
+    cbar.set_label(clabel)
+    plt.ylim(ylimMin, ylimMax)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+
+def plotSinglePopulationResults(resultsFilename, spikeRatesFigsFilename, 
+                                                 rhosFigsFilename, 
+                                                 fromTime, toTime,
+                                                 averageWinTimeLength=1e-3, 
+                                                 ylimAx1=None,
+                                                 ylimAx2=None,
+                                                 climMin=-np.inf, 
+                                                 climMax=np.inf):
+    results = np.load(resultsFilename)
+    if 'ts' in results.keys():
+        times = results['ts']
+    elif 'times' in results.keys():
+        times = results['times']
+    else:
+        raise RuntimeException('times parameter not found in results')
+
+
+    spikesFromIndex = np.argmax(times>=fromTime)
+    spikesToIndex = np.argmax(times>toTime)
+    dt = times[1] - times[0]
+
+    plt.figure()
+    plotSpikeRatesAndInputs(times=times[spikesFromIndex:spikesToIndex], 
+                               spikeRates=results['spikeRates'][spikesFromIndex:spikesToIndex], 
+                               dt=dt, 
+#                     eExternalInput=results['eExternalInputHist'],
+#                     eFeedbackInput=results['eFeedbackInputHist'],
+#                     iExternalInput=results['iExternalInputHist'],
+#                     iFeedbackInput=results['iFeedbackInputHist'],
+                    averageWinTimeLength=averageWinTimeLength,
+                    ylimAx1=ylimAx1,
+                    ylimAx2=ylimAx2)
+    plt.savefig(spikeRatesFigsFilename)
+
+    if 'saveRhosTimeDSFactor' in results.keys():
+        saveRhosTimeDSFactor = results['saveRhosTimeDSFactor']
+    else:
+        saveRhosTimeDSFactor = 1.0
+    rhosFromIndex = spikesFromIndex/saveRhosTimeDSFactor
+    rhosToIndex = spikesToIndex/saveRhosTimeDSFactor
+    if "vs" not in results.keys():
+        nVSteps = results['rhos'].shape[0]
+        vs = np.linspace(1, nVSteps, nVSteps)/nVSteps
+    else:
+        vs = results['vs']
+    plt.figure()
+    plotRhos(vs=vs, times=times[spikesFromIndex:spikesToIndex]\
+                               [::int(saveRhosTimeDSFactor)], 
+                    rhos=results['rhos'][:,rhosFromIndex:rhosToIndex],
+                    climMin=climMin, climMax=climMax)
+    plt.savefig(rhosFigsFilename)
+
+def plotTwoPopulationsSpikeRates(results, eSpikeRatesFigFilename, 
+                                          iSpikeRatesFigFilename, 
+                                          fromTime, toTime,
+                                          averageWinTimeLength=1e-3,
+                                          ylimAx1=(0, 25),
+                                          ylimAx2=(0, 1400)):
+    eTimes = results["eTimes"]
+    eSpikesFromIndex = np.argmax(eTimes>=fromTime)
+    eSpikesToIndex = np.argmax(eTimes>toTime)
+
+    iTimes = results["iTimes"]
+    iSpikesFromIndex = np.argmax(iTimes>=fromTime)
+    iSpikesToIndex = np.argmax(iTimes>toTime)
+
+    eDt = eTimes[1] - eTimes[0]
+    iDt = iTimes[1] - iTimes[0]
+
+    if results.keys().count("eEFeedbackInputHist")>0:
+        eEFeedbackInputHist = results["eEFeedbackInputHist"][eSpikesFromIndex:eSpikesToIndex]
+    else:
+        eEFeedbackInputHist = None
+
+    if results.keys().count("eIExternalInputHist")>0:
+        eIExternalInputHist = results["eIExternalInputHist"][eSpikesFromIndex:eSpikesToIndex]
+    else:
+        eIExternalInputHist = None
+
+    if results.keys().count("eIFeedbackInputHist")>0:
+        eIFeedbackInputHist = results["eIFeedbackInputHist"][eSpikesFromIndex:eSpikesToIndex]
+    else:
+        eIFeedbackInputHist = None
+
+    plt.figure()
+    plotSpikeRatesAndInputs(times=results["eTimes"][eSpikesFromIndex:eSpikesToIndex], 
+                    spikeRates=results["eSpikeRates"][eSpikesFromIndex:eSpikesToIndex], 
+                    eExternalInput=results["eEExternalInputHist"][eSpikesFromIndex:eSpikesToIndex],
+                    eFeedbackInput=eEFeedbackInputHist,
+                    iExternalInput=eIExternalInputHist,
+                    iFeedbackInput=eIFeedbackInputHist,
+                    dt=eDt, 
+                    averageWinTimeLength=averageWinTimeLength,
+                    ylimAx1=ylimAx1,
+                    ylimAx2=ylimAx2)
+    plt.savefig(eSpikeRatesFigFilename)
+
+    if results.keys().count("iEFeedbackInputHist")>0:
+        iEFeedbackInputHist = results["iEFeedbackInputHist"][iSpikesFromIndex:iSpikesToIndex]
+    else:
+        iEFeedbackInputHist = None
+
+    if results.keys().count("iIExternalInputHist")>0:
+        iIExternalInputHist = results["iIExternalInputHist"][iSpikesFromIndex:iSpikesToIndex] 
+    else:
+        iIExternalInputHist = None
+
+    if results.keys().count("iIFeedbackInputHist")>0:
+        iIFeedbackInputHist = results["iIFeedbackInputHist"][iSpikesFromIndex:iSpikesToIndex]
+    else:
+        iIFeedbackInputHist = None
+
+    plt.figure()
+    plotSpikeRatesAndInputs(times=results["iTimes"][iSpikesFromIndex:iSpikesToIndex], 
+                    spikeRates=results["iSpikeRates"][iSpikesFromIndex:iSpikesToIndex], 
+                    eExternalInput=results["iEExternalInputHist"][iSpikesFromIndex:iSpikesToIndex],
+                    eFeedbackInput=iEFeedbackInputHist,
+                    iExternalInput=iIExternalInputHist,
+                    iFeedbackInput=iIFeedbackInputHist,
+                    dt=iDt, 
+                    averageWinTimeLength=averageWinTimeLength,
+                    ylimAx1=ylimAx1,
+                    ylimAx2=ylimAx2)
+    plt.savefig(iSpikeRatesFigFilename)
+
+def plotTwoPopulationsRhos(results, eRhosFigFilename, iRhosFigFilename, 
+                                    fromTime, toTime, 
+                                    climMin=-np.inf, climMax=np.inf):
+    eTimes = results["eTimes"]
+    eSpikesFromIndex = np.argmax(eTimes>=fromTime)
+    eSpikesToIndex = np.argmax(eTimes>toTime)
+
+    iTimes = results["iTimes"]
+    iSpikesFromIndex = np.argmax(iTimes>=fromTime)
+    iSpikesToIndex = np.argmax(iTimes>toTime)
+
+#     saveRhosTimeDSFactor = results["saveRhosTimeDSFactor"]
+    saveRhosTimeDSFactor = 100
+
+    eRhosFromIndex = eSpikesFromIndex/saveRhosTimeDSFactor
+    eRhosToIndex = eSpikesToIndex/saveRhosTimeDSFactor
+    eRhosTimes = results["eTimes"][eSpikesFromIndex:eSpikesToIndex]\
+                                  [::saveRhosTimeDSFactor] 
+
+    iRhosFromIndex = iSpikesFromIndex/saveRhosTimeDSFactor
+    iRhosToIndex = iSpikesToIndex/saveRhosTimeDSFactor
+    iRhosTimes = results["eTimes"][iSpikesFromIndex:iSpikesToIndex]\
+                                  [::saveRhosTimeDSFactor] 
+
+    plt.figure()
+    plotRhos(vs=results["vs"], 
+              times=eRhosTimes,
+              rhos=results["eRhos"][:, eRhosFromIndex:eRhosToIndex],
+              climMin=climMin, climMax=climMax)
+    plt.savefig(eRhosFigFilename)
+
+    plt.figure()
+    plotRhos(vs=results["vs"], 
+              times=iRhosTimes,
+              rhos=results["iRhos"][:, iRhosFromIndex:iRhosToIndex],
+              climMin=climMin, climMax=climMax)
+    plt.savefig(iRhosFigFilename)
+
+def plotTwoPopulationsRhosFromLDCoefs(results, eigenRepos,
+                                               eRhosFigFilename, 
+                                               iRhosFigFilename, 
+                                               fromTime, toTime):
+    eTimes = results["eTimes"]
+    eSpikesFromIndex = np.argmax(eTimes>=fromTime)
+    eSpikesToIndex = np.argmax(eTimes>toTime)
+
+    iTimes = results["iTimes"]
+    iSpikesFromIndex = np.argmax(iTimes>=fromTime)
+    iSpikesToIndex = np.argmax(iTimes>toTime)
+
+#     saveRhosTimeDSFactor = results["saveRhosTimeDSFactor"]
+    saveRhosTimeDSFactor = 100
+
+    eRhosFromIndex = eSpikesFromIndex/saveRhosTimeDSFactor
+    eRhosToIndex = eSpikesToIndex/saveRhosTimeDSFactor
+    eRhosTimes = results["eTimes"][eSpikesFromIndex:eSpikesToIndex]\
+                                  [::saveRhosTimeDSFactor] 
+
+    timesKey = "eTimes"
+    rhosKey = "eRhos"
+    sriLDCoefsKey = "eSRILDCoefs"
+    eExternalInputHistKey = "eEExternalInputHist"
+    iExternalInputHistKey = "eIExternalInputHist"
+    eFeedbackInputHistKey = "eEFeedbackInputHist"
+    iFeedbackInputHistKey = "eIFeedbackInputHist"
+    rhosFromLD = reconstructRhos(sriLDCoefs=results[sriLDCoefsKey],
+                            eigenRepos=eigenRepos,
+                            eExternalInputHist=results[eExternalInputHistKey],
+                            iExternalInputHist=results[iExternalInputHistKey],
+                            eFeedbackInputHist=
+                             results[eFeedbackInputHistKey],
+                            iFeedbackInputHist=
+                             results[iFeedbackInputHistKey],
+                            saveRhosTimeDSFactor=saveRhosTimeDSFactor)
+    rhosFromLD[np.where(rhosFromLD<0.0)] = 0.0
+
+    plt.figure()
+    plotRhos(vs=results["vs"], 
+              times=eRhosTimes,
+              rhos=rhosFromLD[:, eRhosFromIndex:eRhosToIndex])
+    plt.savefig(eRhosFigFilename)
+
+    iRhosFromIndex = iSpikesFromIndex/saveRhosTimeDSFactor
+    iRhosToIndex = iSpikesToIndex/saveRhosTimeDSFactor
+    iRhosTimes = results["eTimes"][iSpikesFromIndex:iSpikesToIndex]\
+                                  [::saveRhosTimeDSFactor] 
+    timesKey = "iTimes"
+    rhosKey = "iRhos"
+    sriLDCoefsKey = "iSRILDCoefs"
+    eExternalInputHistKey = "iEExternalInputHist"
+    iExternalInputHistKey = "iIExternalInputHist"
+    eFeedbackInputHistKey = "iEFeedbackInputHist"
+    iFeedbackInputHistKey = "iIFeedbackInputHist"
+    rhos = reconstructRhos(sriLDCoefs=results[sriLDCoefsKey],
+                            eigenRepos=eigenRepos,
+                            eExternalInputHist=results[eExternalInputHistKey],
+                            iExternalInputHist=results[iExternalInputHistKey],
+                            eFeedbackInputHist=
+                             results[eFeedbackInputHistKey],
+                            iFeedbackInputHist=
+                             results[iFeedbackInputHistKey],
+                            saveRhosTimeDSFactor=saveRhosTimeDSFactor)
+    rhosFromLD[np.where(rhos<0.0)] = 0.0
+    plt.figure()
+    plotRhos(vs=results["vs"], 
+              times=iRhosTimes,
+              rhos=rhosFromLD[:, iRhosFromIndex:iRhosToIndex])
+    plt.savefig(iRhosFigFilename)
+
+def plotTwoPopulationsResults(resultsFilename, 
+                                eSpikeRatesFigFilename, 
+                                eRhosFigFilename, 
+                                iSpikeRatesFigFilename, 
+                                iRhosFigFilename, 
+                                averageWinTimeLength=1e-3,
+                                fromTime=0.0,
+                                toTime=0.59,
+                                climMin=-np.inf, climMax=np.inf,
+                                ylimAx1=(0, 25),
+                                ylimAx2=(0, 1400)):
+    results = np.load(resultsFilename)
+
+    plotTwoPopulationsSpikeRates(results=results,
+                                  eSpikeRatesFigFilename=eSpikeRatesFigFilename,
+                                  iSpikeRatesFigFilename=iSpikeRatesFigFilename,
+                                  fromTime=fromTime, toTime=toTime,
+                                  averageWinTimeLength=averageWinTimeLength,
+                                  ylimAx1=ylimAx1, ylimAx2=ylimAx2)
+    plotTwoPopulationsRhos(results=results,
+                            eRhosFigFilename=eRhosFigFilename,
+                            iRhosFigFilename=iRhosFigFilename,
+                            fromTime=fromTime, toTime=toTime,
+                            climMin=climMin, climMax=climMax)
+
+def plotTwoPopulationsLDResults(resultsFilename, 
+                                 eigenRepos,
+                                 eSpikeRatesFigFilename, 
+                                 eRhosFigFilename, 
+                                 iSpikeRatesFigFilename, 
+                                 iRhosFigFilename, 
+                                 averageWinTimeLength=1e-3,
+                                 fromTime=0.0,
+                                 toTime=0.59):
+    results = np.load(resultsFilename)
+#     pdb.set_trace()
+
+    plotTwoPopulationsSpikeRates(results=results,
+                                  eSpikeRatesFigFilename=eSpikeRatesFigFilename,
+                                  iSpikeRatesFigFilename=iSpikeRatesFigFilename,
+                                  fromTime=fromTime, toTime=toTime,
+                                  averageWinTimeLength=averageWinTimeLength)
+    plotTwoPopulationsRhosFromLDCoefs(results=results, 
+                                       eigenRepos=eigenRepos,
+                                       eRhosFigFilename=eRhosFigFilename,
+                                       iRhosFigFilename=iRhosFigFilename,
+                                       fromTime=fromTime, toTime=toTime)
+

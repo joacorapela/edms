@@ -1,0 +1,13 @@
+
+import numpy as np
+import abc
+import pdb
+from IFEnsembleDensityIntegrator import IFEnsembleDensityIntegrator
+from ifEDMsFunctions import computeA1DiffusionApproximation
+
+class IFEnsembleDensityIntegratorDDiffusion(IFEnsembleDensityIntegrator):
+
+    def __init__(self, nVSteps, leakage, hMu):
+        super(IFEnsembleDensityIntegratorDDiffusion, self).\
+         __init__(nVSteps=nVSteps, leakage=leakage, hMu=hMu)
+        self._a1 = computeA1DiffusionApproximation(nVSteps=nVSteps, hMu=hMu)

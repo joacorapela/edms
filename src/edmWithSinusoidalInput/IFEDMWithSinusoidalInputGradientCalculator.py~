@@ -1,0 +1,471 @@
+
+import sys
+import pdb
+import math
+import numpy as np
+from utilsMath import Logistic
+from Sinusoidal import Sinusoidal
+\
+# Begin delete
+# import matplotlib.pyplot as plt
+# End delete
+
+class IFEDMWithSinusoidalInputGradientCalculator:
+
+    def __init__(self, a0Tilde, a1, a2, reversedQs, 
+                       variablesToOptimize, fixedParameterValues):
+        self._a0Tilde = a0Tilde
+        self._a1 = a1
+        self._a2 = a2
+        self._qR = reversedQs
+        self._variablesToOptimize = variablesToOptimize
+        self._setFixedParameterValues(values=fixedParameterValues,
+                                       variablesToOptimize=variablesToOptimize)
+
+    def deriv(self, x, ys, rs, rhos, inputs, ysSigma, times):
+        self._setParameterValuesToOptimize(values=x, 
+                                            variablesToOptimize=\
+                                             self._variablesToOptimize)
+        dt = times[1]-times[0]
+        nTimeSteps = ys.size
+        nVSteps = self._a0Tilde.shape[0]
+        dv = 1.0/nVSteps
+        idM = np.identity(self._a0Tilde.shape[0])
+        self._initDerivVariables(nVSteps=nVSteps, 
+                                  nTimeSteps=nTimeSteps,
+                                  variablesToOptimize=self._variablesToOptimize)
+
+        for n in xrange(1, nTimeSteps):
+            '''
+            Derivatives of r are computed for time n
+            Derivatives of rho are computed for time n+1
+            '''
+            # '''
+            if n%100==0:
+                print("Gradient calculator step %d (out of %d)" % \
+                      (n, nTimeSteps))
+                if "leakage" in self._variablesToOptimize:
+                    print "DLLLeakage=%f, "%self._dLLLeakages[n-1],
+                if "g" in self._variablesToOptimize:
+                    print "DLLG=%f, "%self._dLLGs[n-1],
+                if "f" in self._variablesToOptimize:
+                    print "DLLF=%f, "%self._dLLFs[n-1],
+                if "eScale" in self._variablesToOptimize:
+                    print "DLLEScale=%f, "%self._dLLEScales[n-1],
+                if "eContrast" in self._variablesToOptimize:
+                    print "DLLEContrast=%f, "%self._dLLEContrasts[n-1],
+                if "eFreq" in self._variablesToOptimize:
+                    print "DLLEFreq=%f, "%self._dLLEFreqs[n-1],
+                if "ePhase" in self._variablesToOptimize:
+                    print "DLLEPhase=%f, "%self._dLLEPhases[n-1],
+                print
+                sys.stdout.flush()
+            # '''
+
+            rho = rhos[:,n]
+
+            sigma0E = self._sigma(scale=self._eScale,
+                                   contrast=self._eContrast,
+                                   freq=self._eFreq, 
+                                   phase=self._ePhase,
+                                   t=times[n])
+            sigma0I = self._sigma(scale=self._iScale,
+                                   contrast=self._iContrast,
+                                   freq=self._iFreq, 
+                                   phase=self._iPhase,
+                                   t=times[n])
+
+            qRDotRho = dv*np.dot(self._qR, rho)
+            cFactorDr = 1-self._g*self._f*qRDotRho
+            cFactorDRho = idM+\
+                           dt*(self._leakage/2*self._a0Tilde+\
+                                      (sigma0E+self._g*self._f*rs[n])*self._a1-\
+                                      (sigma0I+self._g*(1-self._f)*rs[n])*\
+                                      self._a2)
+
+            if "leakage" in self._variablesToOptimize:
+                qRDotDRhoLeakage = dv*np.dot(self._qR, self._dRhoLeakage)
+                uLLLeakage = self._getUpdateDLLLeakage(qRDotRho=qRDotRho, 
+                                                        qRDotDRhoLeakage=
+                                                         qRDotDRhoLeakage,
+                                                        cFactorDr=cFactorDr,
+                                                        cFactorDRho=cFactorDRho,
+                                                        sigma0E=sigma0E,
+                                                        y=ys[n],
+                                                        r=rs[n],
+                                                        t=times[n],
+                                                        dt=dt,
+                                                        rho=rho)
+                self._dLLLeakages[n] = self._dLLLeakages[n-1] + uLLLeakage
+
+            if "g" in self._variablesToOptimize:
+                qRDotDRhoG = dv*np.dot(self._qR, self._dRhoG)
+                uLLG = self._getUpdateDLLG(qRDotRho=qRDotRho,
+                                            qRDotDRhoG=qRDotDRhoG,
+                                            cFactorDr=cFactorDr, 
+                                            cFactorDRho=cFactorDRho,
+                                            sigma0E=sigma0E,
+                                            y=ys[n], 
+                                            r=rs[n],
+                                            t=times[n],
+                                            dt=dt,
+                                            rho=rho)
+                self._dLLGs[n] = self._dLLGs[n-1] + uLLG
+
+            if "f" in self._variablesToOptimize:
+                qRDotDRhoF = dv*np.dot(self._qR, self._dRhoF)
+                uLLF = self._getUpdateDLLF(qRDotRho=qRDotRho,
+                                            qRDotDRhoF=qRDotDRhoF,
+                                            cFactorDr=cFactorDr, 
+                                            cFactorDRho=cFactorDRho,
+                                            sigma0E=sigma0E,
+                                            y=ys[n], 
+                                            r=rs[n],
+                                            t=times[n],
+                                            dt=dt,
+                                            rho=rho)
+                self._dLLFs[n] = self._dLLFs[n-1] + uLLF
+
+            if "eScale" in self._variablesToOptimize:
+                qRDotDRhoEScale = dv*np.dot(self._qR, self._dRhoEScale)
+                uLLScale = self._getUpdateDLLEScale(qRDotRho=qRDotRho,
+                                                 qRDotDRhoEScale=
+                                                  qRDotDRhoEScale,
+                                                 cFactorDr=cFactorDr, 
+                                                 cFactorDRho=cFactorDRho,
+                                                 sigma0E=sigma0E,
+                                                 y=ys[n], 
+                                                 r=rs[n],
+                                                 t=times[n],
+                                                 dt=dt,
+                                                 rho=rho)
+                self._dLLEScales[n] = self._dLLEScales[n-1] + uLLEScale
+
+            if "eContrast" in self._variablesToOptimize:
+                qRDotDRhoEContrast = dv*np.dot(self._qR, self._dRhoEContrast)
+                uLLContrast = self._getUpdateDLLEContrast(qRDotRho=qRDotRho,
+                                                    qRDotDRhoEContrast=
+                                                     qRDotDRhoEContrast,
+                                                    cFactorDr=cFactorDr, 
+                                                    cFactorDRho=cFactorDRho,
+                                                    sigma0E=sigma0E,
+                                                    y=ys[n], 
+                                                    r=rs[n],
+                                                    t=times[n],
+                                                    dt=dt,
+                                                    rho=rho)
+                self._dLLEContrasts[n] = self._dLLEContrasts[n-1] + \
+                                         uLLEContrast
+
+            if "eFreq" in self._variablesToOptimize:
+                qRDotDRhoEFreq = dv*np.dot(self._qR, self._dRhoEFreq)
+                uLLEFreq = self._getUpdateDLLEFreq(qRDotRho=qRDotRho,
+                                            qRDotDRhoEFreq=qRDotDRhoEFreq,
+                                            cFactorDr=cFactorDr, 
+                                            cFactorDRho=cFactorDRho,
+                                            sigma0E=sigma0E,
+                                            y=ys[n], 
+                                            r=rs[n],
+                                            t=times[n],
+                                            dt=dt,
+                                            rho=rho)
+                self._dLLEFreqs[n] = self._dLLEFreqs[n-1] + uLLEFreq
+
+            if "ePhase" in self._variablesToOptimize:
+                qRDotDRhoEPhase = dv*np.dot(self._qR, self._dRhoEPhase)
+                uLLePhase = self._getUpdateDLLEPhase(qRDotRho=qRDotRho,
+                                            qRDotDRhoEPhase=qRDotDRhoEPhase,
+                                            cFactorDr=cFactorDr, 
+                                            cFactorDRho=cFactorDRho,
+                                            sigma0E=sigma0E,
+                                            y=ys[n], 
+                                            r=rs[n],
+                                            t=times[n],
+                                            dt=dt,
+                                            rho=rho)
+                self._dLLEPhases[n] = self._dLLEPhases[n-1] + uLLEPhase
+
+        gradients = self._buildGradients(ysSigma=ysSigma,
+                                          nTimeSteps=nTimeSteps,
+                                          variablesToOptimize=
+                                           self._variablesToOptimize)
+
+        return(gradients)
+
+    def _setFixedParameterValues(self, values, variablesToOptimize):
+        valuesIndex = 0
+
+        if "leakage" not in variablesToOptimize:
+            self._leakage = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "g" not in variablesToOptimize:
+            self._g = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "f" not in variablesToOptimize:
+            self._f = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "eScale" not in variablesToOptimize:
+            self._eScale = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "eContrast" not in variablesToOptimize:
+            self._eContrast = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "eFreq" not in variablesToOptimize:
+            self._eFreq = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "ePhase" not in variablesToOptimize:
+            self._ePhase = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+    def _setParameterValuesToOptimize(self, values, variablesToOptimize):
+        valuesIndex = 0
+
+        if "leakage" in variablesToOptimize:
+            self._leakage = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "g" in variablesToOptimize:
+            self._g = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "f" in variablesToOptimize:
+            self._f = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "eScale" in variablesToOptimize:
+            self._eScale = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "eContrast" in variablesToOptimize:
+            self._eContrast = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "eFreq" in variablesToOptimize:
+            self._eFreq = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+        if "ePhase" in variablesToOptimize:
+            self._ePhase = values[valuesIndex]
+            valuesIndex =  valuesIndex + 1
+
+    def _initDerivVariables(self, nTimeSteps, nVSteps, variablesToOptimize):
+        if "leakage" in variablesToOptimize:
+            self._dRhoLeakage = np.zeros(nVSteps)
+            self._dLLLeakages = np.empty(nTimeSteps)
+            self._dLLLeakages[:] = np.nan
+            self._dLLLeakages[0] = 0.0
+
+        if "g" in variablesToOptimize:
+            self._dRhoG = np.zeros(nVSteps)
+            self._dLLGs = np.empty(nTimeSteps)
+            self._dLLGs[:] = np.nan
+            self._dLLGs[0] = 0.0
+
+        if "f" in variablesToOptimize:
+            self._dRhoF = np.zeros(nVSteps)
+            self._dLLFs = np.empty(nTimeSteps)
+            self._dLLFs[:] = np.nan
+            self._dLLFs[0] = 0.0
+
+        if "eScale" in variablesToOptimize:
+            self._dRhoEScale = np.zeros(nVSteps)
+            self._dLLEScales = np.empty(nTimeSteps)
+            self._dLLEScales[:] = np.nan
+            self._dLLEScales[0] = 0.0
+
+        if "eContrast" in variablesToOptimize:
+            self._dRhoEContrast = np.zeros(nVSteps)
+            self._dLLEContrasts = np.empty(nTimeSteps)
+            self._dLLEContrasts[:] = np.nan
+            self._dLLEContrasts[0] = 0.0
+
+        if "eFreq" in variablesToOptimize:
+            self._dRhoEFreq = np.zeros(nVSteps)
+            self._dLLEFreqs = np.empty(nTimeSteps)
+            self._dLLEFreqs[:] = np.nan
+            self._dLLEFreqs[0] = 0.0
+
+        if "ePhase" in variablesToOptimize:
+            self._dRhoEPhase = np.zeros(nVSteps)
+            self._dLLEPhases = np.empty(nTimeSteps)
+            self._dLLEPhases[:] = np.nan
+            self._dLLEPhases[0] = 0.0
+
+    def _sigma(self, scale, contrast, freq, phase, t):
+        sinusoidal = Sinusoidal(scale=scale, contrast=contrast, freq=freq,
+                                             phase=phase)
+        answer = sinusoidal.eval(t=t)
+        return(answer)
+
+    def _getUpdateDLLLeakage(self, qRDotRho,
+                                   qRDotDRhoLeakage,
+                                   cFactorDr,
+                                   cFactorDRho,
+                                   sigma0E,
+                                   y,
+                                   r,
+                                   dt,
+                                   rho):
+        drLeakage = sigma0E*(qRDotDRhoLeakage*cFactorDr+\
+                             qRDotRho*self._g*self._f*qRDotDRhoLeakage)/\
+                     cFactorDr**2
+        self._dRhoLeakage = dt*(0.5*self._a0Tilde+self._g*self._f*\
+                                drLeakage*self._a1-self._g*(1-self._f)*\
+                                drLeakage*self._a2).dot(rho)+\
+                             cFactorDRho.dot(self._dRhoLeakage)
+        return((y-r)*drLeakage)
+
+    def _getUpdateDLLG(self, qRDotRho,
+                             qRDotDRhoG,
+                             cFactorDr,
+                             cFactorDRho,
+                             sigma0E,
+                             y,
+                             r,
+                             dt,
+                             rho):
+        drG = sigma0E*(qRDotDRhoG*cFactorDr+qRDotRho*\
+                        (self._f*qRDotRho+self._g*self._f*qRDotDRhoG))/\
+               cFactorDr**2
+        self._dRhoG = dt*((self._f*r+self._g*self._f*drG)*self._a1-\
+                          ((1-self._f)*r+self._g*self._f*qRDotDRhoG)*\
+                          self._a2).dot(rho)+\
+                      cFactorDRho.dot(self._dRhoG)
+        return((y-r)*drG)
+
+    def _getUpdateDLLF(self, qRDotRho,
+                             qRDotDRhoF,
+                             cFactorDr,
+                             cFactorDRho,
+                             sigma0E,
+                             y,
+                             r,
+                             dt,
+                             rho):
+        drF = sigma0E*(qRDotDRhoF*cFactorDr+\
+                        qRDotRho*self._g*(qRDotRho+self._f*qRDotDRhoF))/\
+                    cFactorDr**2
+        self._dRhoF = dt*(self._g*(r+self._f*drF)*self._a1-\
+                           self._g*(-r+(1-self._f)*drF)*self._a2).\
+                         dot(rho)+\
+                       cFactorDRho.dot(self._dRhoF)
+        return((y-r)*drF)
+
+    def _getUpdateDLLEScale(self, qRDotRho,
+                             qRDotDRhoEScale,
+                             cFactorDr,
+                             cFactorDRho,
+                             sigma0E,
+                             y,
+                             r,
+                             t,
+                             rho):
+        dSigma0EEScale = \
+         (1+abs(self._contrast)*\
+            math.sin(2*math.pi*abs(self._freq)*t+self._phase))*sign(self._scale)
+        self._drEScale = \
+         ((dSigma0EEScale*qRDotRho+sigma0E*qRDotDRhoEScale)*cFactorDr+\
+          sigma0E*qRDotRho*self._g*self._f*qRDotDRhoEScale)/cFactorDr**2
+        self._dRhoEScale = \
+         dt*((dSigma0EEScale+self_g*self_f*self._drEScale)*self._a1-\ 
+             self._g*(1-self._f)*self._drEScale*self._a2).dot(rho)+\
+         cFactorDRho.dot(self._dRhoEScale)
+        return((y-r)*drEScale)
+
+    def _getUpdateDLLEContrast(self, qRDotRho,
+                             qRDotDRhoEContrast,
+                             cFactorDr,
+                             cFactorDRho,
+                             sigma0E,
+                             y,
+                             r,
+                             t,
+                             rho):
+        dSigma0EEContrast = \
+         abs(self._scale)*math.sin(2*math.pi*abs(self._freq)*t+self._phase)*\
+          sign(self._contrast)
+        self._drEContrast = \
+         ((dSigma0EEContrast*qRDotRho+sigma0E*qRDotDRhoEContrast)*cFactorDr+\
+          sigma0E*qRDotRho*self._g*self._f*qRDotDRhoEContrast)/cFactorDr**2
+        self._dRhoEContrast = \
+         dt*((dSigma0EEContrast+self_g*self_f*self._drEContrast)*self._a1-\ 
+             self._g*(1-self._f)*self._drEContrast*self._a2).dot(rho)+\
+         cFactorDRho.dot(self._dRhoEContrast)
+        return((y-r)*drEContrast)
+
+    def _getUpdateDLLEFreq(self, qRDotRho,
+                             qRDotDRhoEFreq,
+                             cFactorDr,
+                             cFactorDRho,
+                             sigma0E,
+                             y,
+                             r,
+                             t,
+                             rho):
+        dSigma0EEFreq = \
+         abs(self._scale*self._contrast)*\
+          math.cos(2*math.pi*abs(self._freq)*t+self._phase)*\
+          2*math.pi*t*sign(self._freq)
+        self._drEFreq = \
+         ((dSigma0EEFreq*qRDotRho+sigma0E*qRDotDRhoEFreq)*cFactorDr+\
+          sigma0E*qRDotRho*self._g*self._f*qRDotDRhoEFreq)/cFactorDr**2
+        self._dRhoEFreq = \
+         dt*((dSigma0EEFreq+self_g*self_f*self._drEFreq)*self._a1-\ 
+             self._g*(1-self._f)*self._drEFreq*self._a2).dot(rho)+\
+         cFactorDRho.dot(self._dRhoEFreq)
+        return((y-r)*drEFreq)
+
+    def _getUpdateDLLEPhase(self, qRDotRho,
+                             qRDotDRhoEPhase,
+                             cFactorDr,
+                             cFactorDRho,
+                             sigma0E,
+                             y,
+                             r,
+                             t,
+                             rho):
+        dSigma0EEPhase = \
+         abs(self._scale*self._contrast)*\
+          math.cos(2*math.pi*abs(self._freq)*t+self._phase)
+        self._drEPhase = \
+         ((dSigma0EEPhase*qRDotRho+sigma0E*qRDotDRhoEPhase)*cFactorDr+\
+          sigma0E*qRDotRho*self._g*self._f*qRDotDRhoEPhase)/cFactorDr**2
+        self._dRhoEPhase = \
+         dt*((dSigma0EEPhase+self_g*self_f*self._drEPhase)*self._a1-\ 
+             self._g*(1-self._f)*self._drEPhase*self._a2).dot(rho)+\
+         cFactorDRho.dot(self._dRhoEPhase)
+        return((y-r)*drEPhase)
+
+    def _buildGradients(self, ysSigma, nTimeSteps, variablesToOptimize):
+        gradients = []
+        normalization = np.arange(1, nTimeSteps+1)*ysSigma**2
+
+        if "leakage" in variablesToOptimize:
+            gradients.append(self._dLLLeakages/normalization)
+
+        if "g" in variablesToOptimize:
+            gradients.append(self._dLLGs/normalization)
+
+        if "f" in variablesToOptimize:
+            gradients.append(self._dLLFs/normalization)
+
+        if "eScale" in variablesToOptimize:
+            gradients.append(self._dLLEScales/normalization)
+
+        if "eContrast" in variablesToOptimize:
+            gradients.append(self._dLLEContrasts/normalization)
+
+        if "eFreq" in variablesToOptimize:
+            gradients.append(self._dLLEFreqs/normalization)
+
+        if "ePhase" in variablesToOptimize:
+            gradients.append(self._dLLEPhases/normalization)
+
+        return(gradients)
+

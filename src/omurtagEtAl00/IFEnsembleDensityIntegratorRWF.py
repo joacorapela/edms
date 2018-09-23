@@ -1,0 +1,32 @@
+
+import math
+import numpy as np
+from IFEnsembleDensityIntegratorR import IFEnsembleDensityIntegratorR
+
+class IFEnsembleDensityIntegratorRWF(IFEnsembleDensityIntegratorR):
+
+    def __init__(self, nVSteps, leakage, hMu, hSigma, nInputsPerNeuron):
+        super(IFEnsembleDensityIntegratorRWF, self).__init__(nVSteps=nVSteps,
+                                                              leakage=leakage,
+                                                              hMu=hMu, 
+                                                              hSigma=hSigma)
+        self._nInputsPerNeuron = nInputsPerNeuron
+
+    def prepareToIntegrate(self, t0, tf, dt, eExternalInput):
+        super(IFEnsembleDensityIntegratorRWF, self).\
+         prepareToIntegrate(t0=t0, tf=tf, dt=dt, eExternalInput=eExternalInput)
+        nTSteps = round((self._tf-self._t0)/self._dt)
+        self._eFeedbackInputHist = []
+
+    def setInitialValue(self, rho0):
+        super(IFEnsembleDensityIntegratorRWF, self).setInitialValue(rho0=rho0)
+        self._eFeedbackInputHist.append(0.0)
+
+    def getEFeedbackInputHist(self):
+        return self._eFeedbackInputHist
+
+    def getNInputsPerNeuron(self):
+        return(self._nInputsPerNeuron)
+
+    def setNInputsPerNeuron(self, nInputsPerNeuron):
+        self._nInputsPerNeuron = nInputsPerNeuron
